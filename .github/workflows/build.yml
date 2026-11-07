@@ -19,14 +19,30 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Download Offline MiniLM ONNX Model & Vocab into Assets
+      - name: Accept Android SDK Licenses
         run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Prepare Assets, Strings & Gradle Dependencies
+        run: |
+          # 1. Download Offline MiniLM ONNX Model & Vocab
           mkdir -p app/src/main/assets
-          curl -L "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/vocab.txt" -o app/src/main/assets/vocab.txt
-          curl -L "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx" -o app/src/main/assets/model_quantized.onnx
+          curl -L -s "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/vocab.txt" -o app/src/main/assets/vocab.txt
+          curl -L -s "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx" -o app/src/main/assets/model_quantized.onnx
+
+          # 2. Ensure strings.xml exists for @string/app_name in accessibility_service_config.xml
+          mkdir -p app/src/main/res/values
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">Tab A9 Offline AI</string>
+          </resources>
+          EOF
+
+          # 3. Fix ONNX Runtime Maven version and ensure lifecycle-runtime-ktx is present
+          sed -i 's/onnxruntime-android:1.31.1/onnxruntime-android:1.20.0/g' app/build.gradle.kts
+          if ! grep -q "lifecycle-runtime-ktx" app/build.gradle.kts; then
+            sed -i '/appcompat:1.7.0/a \    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")' app/build.gradle.kts
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -34,7 +50,7 @@ jobs:
           gradle-version: '8.7'
 
       - name: Compile Debug APK
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload Compiled APK Artifact
         uses: actions/upload-artifact@v4
