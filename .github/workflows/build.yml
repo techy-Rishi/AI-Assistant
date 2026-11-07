@@ -1,0 +1,52 @@
+name: Build Smart Document Organizer APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Download model assets (fails the build if they are missing)
+        run: |
+          set -e
+          mkdir -p app/src/main/assets
+          curl -fL --retry 3 -o app/src/main/assets/vocab.txt \
+            "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/vocab.txt"
+          curl -fL --retry 3 -o app/src/main/assets/model_quantized.onnx \
+            "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx"
+          test "$(wc -c < app/src/main/assets/vocab.txt)" -gt 100000
+          test "$(wc -c < app/src/main/assets/model_quantized.onnx)" -gt 10000000
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compile Debug APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Upload Compiled APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TabA9-Smart-Document-Organizer-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
