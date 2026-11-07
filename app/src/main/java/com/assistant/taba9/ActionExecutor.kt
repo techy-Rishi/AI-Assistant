@@ -14,23 +14,27 @@ class ActionExecutor(private val context: Context) {
             return "Say: 'Send WhatsApp to [Name] saying [Message]'"
         }
         val phone = findPhoneNumber(contactName)
-            ?: return "Contact '$contactName' not found in tablet contacts."
+            ?: return "Contact '$contactName' not found in Contacts."
 
         val cleanPhone = phone.replace(Regex("[^0-9+]"), "")
-        TabletAssistantService.isAutoSendPending = true
-
         val url = "https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(message)}"
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse(url)
             setPackage("com.whatsapp")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
+
         return try {
-            context.startActivity(intent)
-            "Sending WhatsApp to $contactName ($cleanPhone): \"$message\""
+            // Start the watchdog that auto-clicks the WhatsApp Send button
+            TabletAssistantService.triggerWhatsAppAutoSendWatchdog()
+
+            // Use AccessibilityService context if available to bypass Android background launch blocks
+            val launchContext = TabletAssistantService.instance ?: context
+            launchContext.startActivity(intent)
+            "Auto-sending WhatsApp to $contactName ($cleanPhone): \"$message\""
         } catch (e: Exception) {
-            TabletAssistantService.isAutoSendPending = false
-            "WhatsApp is not installed or accessible."
+            TabletAssistantService.cancelPendingAutomation()
+            "Failed to launch WhatsApp: ${e.message}"
         }
     }
 
@@ -41,10 +45,11 @@ class ActionExecutor(private val context: Context) {
 
         val intent = Intent(Intent.ACTION_CALL).apply {
             data = Uri.parse("tel:$phone")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return try {
-            context.startActivity(intent)
+            val launchContext = TabletAssistantService.instance ?: context
+            launchContext.startActivity(intent)
             "Calling $contactName ($phone)..."
         } catch (e: SecurityException) {
             "Call permission not granted."
