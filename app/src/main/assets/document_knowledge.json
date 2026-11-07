@@ -1,0 +1,355 @@
+{
+  "archetypes": [
+    {
+      "id": "Aadhaar_Card",
+      "category": "Personal_IDs",
+      "is_person_centric": true,
+      "regex_patterns": ["\\b[2-9]\\d{3}[\\s-]\\d{4}[\\s-]\\d{4}\\b"],
+      "strong_phrases": ["unique identification authority", "mera aadhaar meri pehchan", "enrollment no", "vid :", "आधार - आम आदमी का अधिकार", "भारतीय विशिष्ट पहचान प्राधिकरण"],
+      "keywords": ["aadhaar", "uidai", "adhar", "आधार", "जन्म तिथि", "year of birth"],
+      "semantic_anchor": "aadhaar card unique identification authority of india uidai identity number dob"
+    },
+    {
+      "id": "PAN_Card",
+      "category": "Personal_IDs",
+      "is_person_centric": true,
+      "regex_patterns": ["\\b[A-Z]{5}[0-9]{4}[A-Z]\\b"],
+      "strong_phrases": ["income tax department", "permanent account number", "permanent account number card", "आयकर विभाग", "स्थायी लेखा संख्या"],
+      "keywords": ["pan card", "incometax", "father's name"],
+      "semantic_anchor": "permanent account number pan card income tax department govt of india"
+    },
+    {
+      "id": "Voter_ID_Card",
+      "category": "Personal_IDs",
+      "is_person_centric": true,
+      "regex_patterns": ["\\b[A-Z]{3}[0-9]{7}\\b"],
+      "strong_phrases": ["election commission of india", "elector photo identity card", "भारत निर्वाचन आयोग", "मतदाता फोटो पहचान पत्र", "elector's name"],
+      "keywords": ["voter id", "epic no", "polling station", "assembly constituency"],
+      "semantic_anchor": "election commission of india voter id card elector photo identity"
+    },
+    {
+      "id": "Driving_License",
+      "category": "Personal_IDs",
+      "is_person_centric": true,
+      "regex_patterns": ["\\b[A-Z]{2}[-\\s]?[0-9]{2}[-\\s]?[0-9]{4}[-\\s]?[0-9]{7}\\b"],
+      "strong_phrases": ["driving licence", "driving license", "union of india driving", "transport department", "mcwg", "lmv"],
+      "keywords": ["dl no", "licence no", "non transport", "validity", "rto"],
+      "semantic_anchor": "driving license motor vehicles transport department lmv mcwg"
+    },
+    {
+      "id": "Indian_Passport",
+      "category": "Personal_IDs",
+      "is_person_centric": true,
+      "regex_patterns": ["\\b[A-Z][0-9]{7}\\b"],
+      "strong_phrases": ["republic of india", "passport", "पासपोर्ट", "place of issue", "date of expiry", "nationality indian"],
+      "keywords": ["passport no", "given name", "surname", "emigration"],
+      "semantic_anchor": "passport republic of india nationality indian date of issue expiry"
+    },
+    {
+      "id": "Ration_Card",
+      "category": "Personal_IDs",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["ration card", "food and civil supplies", "खाद्य एवं रसद विभाग", "राशन कार्ड", "पात्र गृहस्थी", "अंत्योदय"],
+      "keywords": ["fair price shop", "head of family", "मुखिया", "कोटेदार"],
+      "semantic_anchor": "ration card food and civil supplies department family members"
+    },
+    {
+      "id": "10th_HighSchool_Marksheet",
+      "category": "Marksheets_And_Degrees",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["high school examination", "secondary school examination", "matriculation examination", "class x", "class 10", "हाई स्कूल परीक्षा", "माध्यमिक शिक्षा परिषद"],
+      "keywords": ["high school", "highschool", "10th", "social science", "science", "mathematics", "hindi", "english", "roll number", "marks obtained", "positional grade"],
+      "semantic_anchor": "class 10 high school secondary school examination marksheet statement of marks social science"
+    },
+    {
+      "id": "12th_Intermediate_Marksheet",
+      "category": "Marksheets_And_Degrees",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["intermediate examination", "senior school certificate examination", "senior secondary examination", "higher secondary examination", "class xii", "class 12", "इण्टरमीडिएट परीक्षा"],
+      "keywords": ["intermediate", "12th", "senior secondary", "physics", "chemistry", "biology", "accountancy", "business studies", "economics", "marks statement"],
+      "semantic_anchor": "class 12 intermediate senior secondary school certificate examination marksheet physics chemistry"
+    },
+    {
+      "id": "Graduation_Marksheet",
+      "category": "Marksheets_And_Degrees",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["bachelor of technology", "b.tech", "bachelor of science", "bachelor of arts", "bachelor of commerce", "bachelor of computer applications", "statement of grades", "semester grade point average", "cumulative grade point average", "kalam technical university", "aktu"],
+      "keywords": ["semester", "sgpa", "cgpa", "credits", "btech", "bsc", "bcom", "bca", "bba", "university", "even semester", "odd semester", "course code"],
+      "semantic_anchor": "university graduation bachelor degree btech semester marksheet grade sheet sgpa cgpa credits"
+    },
+    {
+      "id": "Diploma_Polytechnic_Marksheet",
+      "category": "Marksheets_And_Degrees",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["board of technical education", "diploma in engineering", "polytechnic", "प्राविधिक शिक्षा परिषद", "bteup"],
+      "keywords": ["diploma", "polytechnic", "sessional", "practical"],
+      "semantic_anchor": "diploma in engineering board of technical education polytechnic marksheet"
+    },
+    {
+      "id": "Degree_Provisional_Certificate",
+      "category": "Marksheets_And_Degrees",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["provisional certificate", "degree of bachelor", "admitted to the degree", "convocation", "given under the seal of the university"],
+      "keywords": ["provisional", "degree certificate", "academic council", "chancellor", "vice chancellor"],
+      "semantic_anchor": "university degree provisional certificate bachelor of technology convocation"
+    },
+    {
+      "id": "Caste_Certificate",
+      "category": "Govt_And_School_Certificates",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["caste certificate", "jati praman patra", "जाति प्रमाण पत्र", "other backward class", "scheduled caste", "scheduled tribe", "पिछड़ी जाति", "अनुसूचित जाति"],
+      "keywords": ["tehsildar", "caste", "sub-caste", "obc", "sc/st", "तहसीलदार", "जाति"],
+      "semantic_anchor": "caste certificate jati praman patra backward class scheduled caste tehsildar"
+    },
+    {
+      "id": "Income_Certificate",
+      "category": "Govt_And_School_Certificates",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["income certificate", "aay praman patra", "आय प्रमाण पत्र", "annual income from all sources", "कुल वार्षिक आय"],
+      "keywords": ["monthly income", "annual income", "वार्षिक आय", "तहसीलदार", "लेखपाल"],
+      "semantic_anchor": "income certificate aay praman patra annual family income tehsildar"
+    },
+    {
+      "id": "Domicile_Residence_Certificate",
+      "category": "Govt_And_School_Certificates",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["domicile certificate", "residence certificate", "niwas praman patra", "निवास प्रमाण पत्र", "सामान्य निवास प्रमाण पत्र", "permanent resident of"],
+      "keywords": ["domicile", "resident", "निवासी", "मूल निवास"],
+      "semantic_anchor": "domicile residence certificate niwas praman patra permanent resident"
+    },
+    {
+      "id": "Transfer_Migration_Character_Certificate",
+      "category": "Govt_And_School_Certificates",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["transfer certificate", "migration certificate", "character certificate", "school leaving certificate", "स्थानांतरण प्रमाण पत्र", "चरित्र प्रमाण पत्र"],
+      "keywords": ["moral character", "dues to the school", "date of leaving", "promoted to"],
+      "semantic_anchor": "transfer certificate migration character school leaving certificate"
+    },
+    {
+      "id": "Course_Internship_Certificate",
+      "category": "Govt_And_School_Certificates",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["certificate of completion", "certificate of appreciation", "certificate of participation", "successfully completed the course", "internship completion", "nptel online certification", "swayam"],
+      "keywords": ["certificate", "internship", "workshop", "bootcamp", "hackathon", "codevita", "nptel", "coursera", "udemy", "ibm"],
+      "semantic_anchor": "certificate of completion participation internship workshop online course nptel"
+    },
+    {
+      "id": "Exam_Admit_Card",
+      "category": "Exams_And_Admissions",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["admit card", "hall ticket", "e-admit card", "प्रवेश पत्र", "examination centre", "reporting time", "gate closing time", "instructions to candidates"],
+      "keywords": ["roll number", "registration number", "test centre", "shift", "invigilator"],
+      "semantic_anchor": "examination admit card hall ticket exam center reporting time roll number"
+    },
+    {
+      "id": "Exam_Scorecard_RankCard",
+      "category": "Exams_And_Admissions",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["score card", "scorecard", "rank card", "all india rank", "gate score", "ugc-net", "junior research fellowship", "nta score", "percentile score", "qualifying marks"],
+      "keywords": ["air", "percentile", "qualified for jrf", "assistant professor", "normalized marks", "cutoff"],
+      "semantic_anchor": "exam scorecard rank card all india rank gate score ugc net jrf percentile"
+    },
+    {
+      "id": "Admission_Application_Allotment",
+      "category": "Exams_And_Admissions",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["confirmation page", "application form", "seat allotment letter", "provisional allotment", "counselling", "mext scholarship", "university recommendation"],
+      "keywords": ["application number", "allotted institute", "choice filling", "fee payment", "scholarship"],
+      "semantic_anchor": "admission application form confirmation page seat allotment counselling scholarship"
+    },
+    {
+      "id": "Resume_CV",
+      "category": "Career_And_Employment",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["curriculum vitae", "resume", "career objective", "professional summary", "work experience", "technical skills", "educational qualification", "academic projects"],
+      "keywords": ["linkedin.com", "github.com", "achievements", "hobbies", "declaration", "languages known", "intern"],
+      "semantic_anchor": "resume curriculum vitae work experience technical skills projects education"
+    },
+    {
+      "id": "Job_Offer_Appointment_Letter",
+      "category": "Career_And_Employment",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["offer of employment", "offer letter", "letter of intent", "appointment letter", "relieving letter", "experience letter", "stipend", "cost to company", "ctc"],
+      "keywords": ["joining date", "probation period", "human resources", "designation", "remuneration"],
+      "semantic_anchor": "job offer letter appointment letter employment joining date ctc hr"
+    },
+    {
+      "id": "Study_Timetable_Prep_Plan",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["study plan", "preparation strategy", "revision schedule", "time table", "timetable", "daily routine", "mock test schedule", "weekly target", "study roadmap"],
+      "keywords": ["monday", "tuesday", "wednesday", "thursday", "friday", "revision", "pyq", "mock test", "hours/day", "target", "week 1", "week 2", "syllabus tracker"],
+      "semantic_anchor": "study plan timetable preparation schedule daily routine revision roadmap"
+    },
+    {
+      "id": "Project_Architecture_Plan",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["project plan", "system architecture", "product requirements document", "prd", "project proposal", "synopsis", "milestone", "deliverables", "tech stack", "implementation plan", "roadmap"],
+      "keywords": ["phase 1", "phase 2", "wireframe", "sprint", "gantt", "backend", "frontend", "database schema", "workflow", "feature list", "timeline"],
+      "semantic_anchor": "software project plan architecture roadmap proposal milestones deliverables tech stack"
+    },
+    {
+      "id": "Business_Startup_Plan",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["business plan", "executive summary", "market analysis", "revenue model", "go-to-market strategy", "pitch deck", "competitor analysis", "swot analysis", "financial projections"],
+      "keywords": ["target audience", "monetization", "tam", "sam", "som", "roi", "break-even", "funding", "marketing plan", "b2b", "b2c"],
+      "semantic_anchor": "business plan startup pitch deck market analysis revenue model strategy"
+    },
+    {
+      "id": "Health_Diet_Workout_Plan",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["diet plan", "meal plan", "workout plan", "workout routine", "fitness plan", "nutrition plan", "training program", "calorie intake"],
+      "keywords": ["breakfast", "lunch", "dinner", "protein", "carbs", "calories", "kcal", "reps", "sets", "cardio", "warm up", "push day", "pull day", "leg day"],
+      "semantic_anchor": "diet meal plan workout fitness routine nutrition calories sets reps"
+    },
+    {
+      "id": "Budget_Financial_Plan",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["monthly budget", "financial plan", "investment plan", "expense tracker", "savings plan", "portfolio allocation", "retirement plan"],
+      "keywords": ["sip", "mutual fund", "fixed expenses", "variable expenses", "emergency fund", "net worth", "emi", "cashflow"],
+      "semantic_anchor": "monthly budget financial investment plan expense tracker savings"
+    },
+    {
+      "id": "Travel_Trip_Itinerary",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["travel itinerary", "trip plan", "tour itinerary", "sightseeing", "packing list", "hotel booking"],
+      "keywords": ["day 1", "day 2", "day 3", "check-in", "check-out", "flight", "departure", "arrival", "places to visit"],
+      "semantic_anchor": "travel trip itinerary day 1 sightseeing hotel flight schedule"
+    },
+    {
+      "id": "Architectural_Floor_Plan",
+      "category": "Plans_And_Roadmaps",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["floor plan", "layout plan", "site plan", "elevation plan", "ground floor", "first floor", "plot area", "built up area"],
+      "keywords": ["bedroom", "kitchen", "drawing room", "toilet", "balcony", "staircase", "sq.ft", "vastu"],
+      "semantic_anchor": "house architectural floor plan layout bedroom kitchen dimensions sqft"
+    },
+    {
+      "id": "Research_Paper_Manuscript",
+      "category": "Academic_And_Research",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["abstract", "introduction", "literature review", "related work", "proposed methodology", "experimental results", "conclusion", "references", "ieee", "springer", "elsevier", "arxiv"],
+      "keywords": ["doi", "dataset", "accuracy", "precision", "recall", "algorithm", "citation", "et al.", "manuscript", "fig.", "table 1"],
+      "semantic_anchor": "academic research paper manuscript abstract methodology experimental results references ieee"
+    },
+    {
+      "id": "Exam_Question_Paper_PYQ",
+      "category": "Academic_And_Research",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["time allowed", "maximum marks", "attempt all questions", "section a", "section b", "section c", "previous year questions", "question paper", "model paper"],
+      "keywords": ["q.1", "q.2", "compulsory", "marks each", "choose the correct", "short notes on"],
+      "semantic_anchor": "examination question paper previous year questions maximum marks time allowed section"
+    },
+    {
+      "id": "Course_Syllabus_Curriculum",
+      "category": "Academic_And_Research",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["course syllabus", "course outcomes", "course objectives", "unit i", "unit ii", "unit iii", "unit iv", "unit v", "text books", "reference books", "evaluation scheme"],
+      "keywords": ["syllabus", "lecture hours", "prerequisites", "module 1", "module 2", "curriculum"],
+      "semantic_anchor": "university course syllabus curriculum unit 1 unit 2 textbooks objectives"
+    },
+    {
+      "id": "Lab_Manual_Assignment",
+      "category": "Academic_And_Research",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["assignment", "lab manual", "experiment no", "objective:", "apparatus required", "procedure:", "observation", "viva questions", "tutorial sheet"],
+      "keywords": ["aim:", "program:", "output:", "precautions", "submitted by", "submitted to"],
+      "semantic_anchor": "college assignment lab manual experiment aim procedure output"
+    },
+    {
+      "id": "Subject_Lecture_Notes",
+      "category": "Academic_And_Research",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["lecture notes", "handwritten notes", "chapter", "definition:", "theorem", "example:", "important points", "summary notes"],
+      "keywords": ["operating system", "deadlock", "paging", "data structures", "linked list", "binary tree", "dynamic programming", "dbms", "normalization", "sql", "computer networks", "tcp/ip", "osi model", "compiler design", "automata", "discrete mathematics", "machine learning", "computer vision"],
+      "semantic_anchor": "computer science engineering lecture notes definitions examples chapters study material"
+    },
+    {
+      "id": "Tax_Invoice_Receipt",
+      "category": "Finance_And_Bills",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["tax invoice", "bill of supply", "cash memo", "payment receipt", "fee receipt", "gstin", "cgst", "sgst", "igst", "total amount", "amount in words"],
+      "keywords": ["invoice no", "order id", "hsn/sac", "taxable value", "grand total", "paid via upi", "transaction id", "amazon", "flipkart"],
+      "semantic_anchor": "tax invoice payment receipt bill gstin total amount paid"
+    },
+    {
+      "id": "Bank_Passbook_Statement",
+      "category": "Finance_And_Bills",
+      "is_person_centric": true,
+      "regex_patterns": ["\\b[A-Z]{4}0[A-Z0-9]{6}\\b"],
+      "strong_phrases": ["statement of account", "account statement", "bank passbook", "ifsc code", "micr code", "opening balance", "closing balance", "state bank of india", "hdfc bank", "icici bank", "punjab national bank", "bank of baroda"],
+      "keywords": ["account number", "branch", "cif no", "debit", "credit", "withdrawal", "deposit", "neft", "imps"],
+      "semantic_anchor": "bank account statement passbook ifsc code opening closing balance transactions"
+    },
+    {
+      "id": "Travel_Ticket_BoardingPass",
+      "category": "Finance_And_Bills",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["electronic reservation slip", "irctc", "pnr number", "boarding pass", "e-ticket", "passenger details", "coach", "berth"],
+      "keywords": ["train no", "flight no", "seat no", "gate", "departure time", "booking status", "cnf"],
+      "semantic_anchor": "irctc train flight ticket boarding pass pnr passenger seat"
+    },
+    {
+      "id": "Legal_Agreement_Affidavit",
+      "category": "Legal_And_Official",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["affidavit", "rent agreement", "lease deed", "non-disclosure agreement", "memorandum of understanding", "terms and conditions", "notary public", "stamp duty", "shapath patra", "शपथ पत्र"],
+      "keywords": ["deponent", "witness", "party of the first part", "whereas", "indemnity", "jurisdiction", "solemnly affirm"],
+      "semantic_anchor": "legal agreement affidavit contract notary stamp duty terms"
+    },
+    {
+      "id": "Medical_Prescription_Report",
+      "category": "Medical_And_Health",
+      "is_person_centric": true,
+      "regex_patterns": [],
+      "strong_phrases": ["laboratory report", "pathology", "diagnostic centre", "prescription", "discharge summary", "reference range", "patient name", "referred by dr"],
+      "keywords": ["hemoglobin", "cbc", "blood sugar", "mg/dl", "tablet", "capsule", "dosage", "hospital", "diagnosis", "opd"],
+      "semantic_anchor": "medical hospital prescription lab test report patient diagnosis"
+    },
+    {
+      "id": "Source_Code_Config",
+      "category": "Code_And_Datasets",
+      "is_person_centric": false,
+      "regex_patterns": [],
+      "strong_phrases": ["fun main(", "def __init__", "public static void main", "import numpy", "import torch", "import cv2", "package com.", "#include <"],
+      "keywords": ["function", "class", "return", "interface", "val ", "var ", "async", "await", "github", "api_key"],
+      "semantic_anchor": "programming source code script python kotlin java c++ configuration"
+    }
+  ]
+}
