@@ -1,11 +1,23 @@
 {
-  "similarity_threshold": 0.36,
+  "similarity_threshold": 0.34,
   "intents": [
     {
       "id": "STOP_ALL",
       "anchors": "stop all features turn off assistant disable voice listening shut down exit",
       "keywords": ["stop all", "turn off", "shut down", "disable", "kill switch"],
       "regex": ""
+    },
+    {
+      "id": "OPEN_APP",
+      "anchors": "open app launch application start youtube chrome settings camera calculator gallery",
+      "keywords": ["open", "launch", "start", "kholo", "chalu karo"],
+      "regex": "(?:open|launch|start|kholo)\\s+([a-zA-Z0-9_ ]+)"
+    },
+    {
+      "id": "SCREEN_INTERACT",
+      "anchors": "click on button tap on text press scroll down scroll up swipe type write text on screen",
+      "keywords": ["click", "tap", "press", "scroll", "swipe", "type", "write", "search for"],
+      "regex": "(?:click on|click|tap on|tap|press|type|write|search for)\\s+(.+)"
     },
     {
       "id": "WHATSAPP_SEND",
@@ -21,37 +33,37 @@
     },
     {
       "id": "SORT_FOLDER",
-      "anchors": "organize sort clean arrange all files documents in whole tablet storage downloads",
-      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files", "storage"],
+      "anchors": "organize sort clean arrange rename all files documents ids in whole tablet storage",
+      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files", "storage", "rename"],
       "regex": ""
     },
     {
       "id": "SYSTEM_CONTROL",
-      "anchors": "go home go back lock screen open notifications split screen volume up volume down mute",
-      "keywords": ["home", "back", "lock", "notification", "volume", "mute", "split"],
+      "anchors": "go home go back lock screen take screenshot notifications split screen volume up down mute battery status flashlight",
+      "keywords": ["home", "back", "lock", "screenshot", "notification", "volume", "mute", "split", "battery", "torch", "flashlight"],
       "regex": ""
     }
   ],
   "folder_rules": [
     {
+      "folder_name": "Personal_IDs",
+      "anchors": "aadhaar card uidai pan card income tax passport voter id driving license marksheet certificate",
+      "keywords": ["aadhaar", "uidai", "income tax", "permanent account number", "passport", "driving licence", "election commission", "certificate", "marksheet"]
+    },
+    {
       "folder_name": "Academic_Notes",
       "anchors": "lecture notes syllabus algorithms operating systems gate exam paper assignment computer science engineering",
-      "keywords": ["syllabus", "lecture", "assignment", "exam", "algorithm", "gate", "university", "theorem"]
+      "keywords": ["syllabus", "lecture", "assignment", "exam", "algorithm", "gate", "university", "theorem", "question paper", "nptel"]
     },
     {
       "folder_name": "Finance_Bills",
       "anchors": "invoice receipt tax gst bank statement payment transaction bill amount paid total",
-      "keywords": ["invoice", "receipt", "gst", "payment", "transaction", "bank", "bill", "amount"]
+      "keywords": ["invoice", "receipt", "gst", "payment", "transaction", "bank", "bill", "amount", "upi"]
     },
     {
       "folder_name": "Code_Projects",
       "anchors": "source code python kotlin java function class repository github documentation api script",
-      "keywords": ["function", "class", "import", "kotlin", "python", "public", "return", "github"]
-    },
-    {
-      "folder_name": "Personal_IDs",
-      "anchors": "aadhaar pan card passport certificate identity license government of india dob",
-      "keywords": ["aadhaar", "passport", "certificate", "identity", "license", "government"]
+      "keywords": ["function", "class", "import", "kotlin", "python", "public", "return", "github", "json"]
     }
   ]
 }
