@@ -1,10 +1,5 @@
 {
   "similarity_threshold": 0.33,
-  "known_people": [
-    "Rishi Yadav",
-    "Deep Narayan Yadav",
-    "Sapana Yadav"
-  ],
   "intents": [
     {
       "id": "STOP_ALL",
