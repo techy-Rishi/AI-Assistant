@@ -8,27 +8,23 @@ import org.json.JSONObject
 import java.nio.LongBuffer
 import kotlin.math.sqrt
 
-data class ParsedCommand(
-    val intentId: String,
-    val targetContact: String = "",
-    val messageBody: String = "",
-    val rawText: String = "",
-    val confidence: Float = 0f
-)
-
-data class IntentRule(
+data class DocumentArchetype(
     val id: String,
-    val anchors: String,
+    val category: String,
+    val isPersonCentric: Boolean,
+    val regexPatterns: List<Regex>,
+    val strongPhrases: List<String>,
     val keywords: List<String>,
-    val regex: String,
-    var vector: FloatArray = FloatArray(0)
+    val semanticAnchor: String,
+    var anchorVector: FloatArray = FloatArray(0)
 )
 
-data class FolderRule(
-    val folderName: String,
-    val anchors: String,
-    val keywords: List<String>,
-    var vector: FloatArray = FloatArray(0)
+data class ClassificationMatch(
+    val archetypeId: String,
+    val category: String,
+    val isPersonCentric: Boolean,
+    val score: Float,
+    val matchedEvidence: String
 )
 
 class OfflineAiEngine(private val context: Context) {
@@ -36,14 +32,12 @@ class OfflineAiEngine(private val context: Context) {
     private var ortEnv: OrtEnvironment? = null
     private var ortSession: OrtSession? = null
     private val vocab = HashMap<String, Long>()
-    private val intentRules = mutableListOf<IntentRule>()
-    private val folderRules = mutableListOf<FolderRule>()
-    private var threshold = 0.38f
+    private val archetypes = mutableListOf<DocumentArchetype>()
 
     fun initEngine() {
         loadVocab()
         initOnnx()
-        loadRulesJson()
+        loadDocumentKnowledge()
     }
 
     private fun loadVocab() {
@@ -62,103 +56,173 @@ class OfflineAiEngine(private val context: Context) {
         } catch (_: Exception) {}
     }
 
-    private fun loadRulesJson() {
-        val jsonStr = context.assets.open("rules.json").bufferedReader().use { it.readText() }
+    private fun loadDocumentKnowledge() {
+        archetypes.clear()
+        val jsonStr = context.assets.open("document_knowledge.json").bufferedReader().use { it.readText() }
         val root = JSONObject(jsonStr)
-        threshold = root.optDouble("similarity_threshold", 0.38).toFloat()
+        val arr = root.getJSONArray("archetypes")
 
-        val intentsArr = root.getJSONArray("intents")
-        for (i in 0 until intentsArr.length()) {
-            val obj = intentsArr.getJSONObject(i)
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val regexArr = obj.optJSONArray("regex_patterns")
+            val regexList = mutableListOf<Regex>()
+            if (regexArr != null) {
+                for (j in 0 until regexArr.length()) {
+                    regexList.add(Regex(regexArr.getString(j), RegexOption.IGNORE_CASE))
+                }
+            }
+
+            val phrasesArr = obj.getJSONArray("strong_phrases")
+            val phrases = (0 until phrasesArr.length()).map { phrasesArr.getString(it).lowercase() }
+
             val kwArr = obj.getJSONArray("keywords")
             val kws = (0 until kwArr.length()).map { kwArr.getString(it).lowercase() }
-            val rule = IntentRule(
+
+            val anchor = obj.getString("semantic_anchor")
+            val arch = DocumentArchetype(
                 id = obj.getString("id"),
-                anchors = obj.getString("anchors"),
+                category = obj.getString("category"),
+                isPersonCentric = obj.getBoolean("is_person_centric"),
+                regexPatterns = regexList,
+                strongPhrases = phrases,
                 keywords = kws,
-                regex = obj.optString("regex", "")
+                semanticAnchor = anchor,
+                anchorVector = embedText(anchor)
             )
-            rule.vector = embedText(rule.anchors)
-            intentRules.add(rule)
-        }
-
-        val foldersArr = root.getJSONArray("folder_rules")
-        for (i in 0 until foldersArr.length()) {
-            val obj = foldersArr.getJSONObject(i)
-            val kwArr = obj.getJSONArray("keywords")
-            val kws = (0 until kwArr.length()).map { kwArr.getString(it).lowercase() }
-            val rule = FolderRule(
-                folderName = obj.getString("folder_name"),
-                anchors = obj.getString("anchors"),
-                keywords = kws
-            )
-            rule.vector = embedText(rule.anchors)
-            folderRules.add(rule)
+            archetypes.add(arch)
         }
     }
 
-    fun parseVoiceCommand(spokenText: String): ParsedCommand {
-        val clean = spokenText.trim()
-        val lower = clean.lowercase()
-        val inputVec = embedText(lower)
+    fun evaluateDocument(fullText: String, origFileName: String): ClassificationMatch {
+        val combined = "$origFileName\n$fullText"
+        val lower = combined.lowercase()
+        val docVec = embedText(lower.take(1500))
 
-        var bestIntent = "UNKNOWN"
+        var bestArch: DocumentArchetype? = null
         var bestScore = 0f
-        var matchedRule: IntentRule? = null
+        var bestReason = ""
 
-        for (rule in intentRules) {
-            val semSim = cosineSimilarity(inputVec, rule.vector)
-            val kwHits = rule.keywords.count { lower.contains(it) }
-            val kwBoost = (kwHits * 0.18f).coerceAtMost(0.45f)
-            val totalScore = semSim + kwBoost
+        for (arch in archetypes) {
+            var score = 0f
+            val reasons = mutableListOf<String>()
 
-            if (totalScore > bestScore) {
-                bestScore = totalScore
-                bestIntent = rule.id
-                matchedRule = rule
+            // 1. Exact ID/Document Regex Pattern Match (+5.0)
+            for (rx in arch.regexPatterns) {
+                val m = rx.find(combined)
+                if (m != null) {
+                    score += 5.0f
+                    reasons.add("pattern:${m.value}")
+                }
+            }
+
+            // 2. Strong Multi-Word Phrase Match (+2.5 each)
+            for (phrase in arch.strongPhrases) {
+                if (lower.contains(phrase)) {
+                    score += 2.5f
+                    if (reasons.size < 3) reasons.add("\"$phrase\"")
+                }
+            }
+
+            // 3. Domain Keyword Hits (+0.65 each)
+            for (kw in arch.keywords) {
+                if (lower.contains(kw)) {
+                    score += 0.65f
+                    if (reasons.size < 3) reasons.add(kw)
+                }
+            }
+
+            // 4. Semantic Vector Cosine Similarity (+0.0 to 1.6)
+            val semSim = cosineSimilarity(docVec, arch.anchorVector)
+            if (semSim > 0.25f) {
+                score += (semSim * 1.6f)
+            }
+
+            if (score > bestScore) {
+                bestScore = score
+                bestArch = arch
+                bestReason = reasons.joinToString(", ").ifEmpty { "semantic:${"%.2f".format(semSim)}" }
             }
         }
 
-        if (bestScore < threshold || matchedRule == null) {
-            return ParsedCommand("UNKNOWN", rawText = clean, confidence = bestScore)
+        // Special Disambiguation for 10th vs 12th vs Graduation Marksheets
+        if (bestArch != null && bestArch.category == "Marksheets_And_Degrees") {
+            val refinedId = refineMarksheetLevel(lower, combined, bestArch.id)
+            return ClassificationMatch(
+                archetypeId = refinedId,
+                category = bestArch.category,
+                isPersonCentric = true,
+                score = bestScore,
+                matchedEvidence = bestReason
+            )
         }
 
-        var contact = ""
-        var message = ""
-        if (matchedRule.regex.isNotEmpty()) {
-            val match = Regex(matchedRule.regex, RegexOption.IGNORE_CASE).find(clean)
-            if (match != null) {
-                contact = match.groupValues.getOrNull(1)?.trim() ?: ""
-                message = match.groupValues.getOrNull(2)?.trim() ?: ""
-            }
+        // Special Disambiguation for Subject Notes & Study Material
+        if (bestArch != null && bestArch.id == "Subject_Lecture_Notes") {
+            val subjectTag = detectSpecificSubject(lower)
+            return ClassificationMatch(
+                archetypeId = subjectTag,
+                category = "Academic_And_Research",
+                isPersonCentric = false,
+                score = bestScore,
+                matchedEvidence = bestReason
+            )
         }
 
-        return ParsedCommand(
-            intentId = bestIntent,
-            targetContact = contact,
-            messageBody = message,
-            rawText = clean,
-            confidence = bestScore
+        if (bestArch == null || bestScore < 0.85f) {
+            return ClassificationMatch(
+                archetypeId = "General_Document",
+                category = "General_Documents",
+                isPersonCentric = false,
+                score = bestScore,
+                matchedEvidence = "low_confidence"
+            )
+        }
+
+        return ClassificationMatch(
+            archetypeId = bestArch.id,
+            category = bestArch.category,
+            isPersonCentric = bestArch.isPersonCentric,
+            score = bestScore,
+            matchedEvidence = bestReason
         )
     }
 
-    fun classifyFileContent(snippet: String): String {
-        val lower = snippet.lowercase()
-        val fileVec = embedText(lower)
-
-        var bestFolder = "Misc_Documents"
-        var bestScore = 0.25f
-
-        for (rule in folderRules) {
-            val semSim = cosineSimilarity(fileVec, rule.vector)
-            val kwHits = rule.keywords.count { lower.contains(it) }
-            val totalScore = semSim + (kwHits * 0.12f)
-            if (totalScore > bestScore) {
-                bestScore = totalScore
-                bestFolder = rule.folderName
+    private fun refineMarksheetLevel(lower: String, raw: String, initialId: String): String {
+        if (lower.contains("b.tech") || lower.contains("btech") || lower.contains("bachelor") ||
+            lower.contains("sgpa") || lower.contains("cgpa") || lower.contains("semester") || lower.contains("aktu")
+        ) {
+            val semMatch = Regex("(?:semester|sem)\\s*[:\\.-]?\\s*([1-8]|viii|vii|vi|v|iv|iii|ii|i)\\b", RegexOption.IGNORE_CASE).find(raw)
+            return if (semMatch != null) {
+                "Graduation_Sem_${semMatch.groupValues[1].uppercase()}_Marksheet"
+            } else {
+                "Graduation_Marksheet"
             }
         }
-        return bestFolder
+        if (lower.contains("intermediate") || lower.contains("senior school") || lower.contains("senior secondary") ||
+            lower.contains("class xii") || lower.contains("12th") || lower.contains("इण्टरमीडिएट") ||
+            (lower.contains("physics") && lower.contains("chemistry") && !lower.contains("social science"))
+        ) {
+            return "12th_Marksheet"
+        }
+        if (lower.contains("high school") || lower.contains("secondary school") || lower.contains("matriculation") ||
+            lower.contains("class x") || lower.contains("10th") || lower.contains("हाई स्कूल") || lower.contains("social science")
+        ) {
+            return "10th_Marksheet"
+        }
+        return initialId
+    }
+
+    private fun detectSpecificSubject(lower: String): String {
+        return when {
+            lower.contains("operating system") || lower.contains("deadlock") || lower.contains("cpu scheduling") -> "OS_Lecture_Notes"
+            lower.contains("data structure") || lower.contains("algorithm") || lower.contains("binary tree") || lower.contains("dynamic programming") -> "DSA_Algorithms_Notes"
+            lower.contains("database") || lower.contains("dbms") || lower.contains("normalization") || lower.contains("sql") -> "DBMS_Notes"
+            lower.contains("computer network") || lower.contains("tcp/ip") || lower.contains("osi model") -> "Computer_Networks_Notes"
+            lower.contains("compiler") || lower.contains("automata") || lower.contains("turing machine") -> "TOC_Compiler_Notes"
+            lower.contains("machine learning") || lower.contains("computer vision") || lower.contains("lane detection") || lower.contains("neural network") -> "AI_ML_Notes"
+            lower.contains("discrete") || lower.contains("linear algebra") || lower.contains("probability") -> "Engineering_Maths_Notes"
+            else -> "Subject_Study_Notes"
+        }
     }
 
     private fun embedText(text: String): FloatArray {
@@ -168,16 +232,16 @@ class OfflineAiEngine(private val context: Context) {
             try {
                 val tokens = tokenizeWordPiece(text)
                 val seqLen = tokens.size.toLong()
-                val attentionMask = LongArray(tokens.size) { 1L }
-                val tokenTypeIds = LongArray(tokens.size) { 0L }
-
+                val mask = LongArray(tokens.size) { 1L }
+                val types = LongArray(tokens.size) { 0L }
                 val shape = longArrayOf(1, seqLen)
-                val inputIdsTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(tokens), shape)
-                val maskTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(attentionMask), shape)
-                val typeTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(tokenTypeIds), shape)
+
+                val idTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(tokens), shape)
+                val maskTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(mask), shape)
+                val typeTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(types), shape)
 
                 val inputs = mapOf(
-                    "input_ids" to inputIdsTensor,
+                    "input_ids" to idTensor,
                     "attention_mask" to maskTensor,
                     "token_type_ids" to typeTensor
                 )
@@ -185,27 +249,26 @@ class OfflineAiEngine(private val context: Context) {
                 session.run(inputs).use { results ->
                     @Suppress("UNCHECKED_CAST")
                     val output = results[0].value as Array<Array<FloatArray>>
-                    val tokenEmbeddings = output[0]
+                    val tokEmb = output[0]
                     val pooled = FloatArray(384)
-                    for (t in tokenEmbeddings) {
+                    for (t in tokEmb) {
                         for (d in 0 until 384) pooled[d] += t[d]
                     }
                     var norm = 0f
                     for (d in 0 until 384) {
-                        pooled[d] /= tokenEmbeddings.size.toFloat()
+                        pooled[d] /= tokEmb.size.toFloat()
                         norm += pooled[d] * pooled[d]
                     }
                     norm = sqrt(norm) + 1e-8f
                     for (d in 0 until 384) pooled[d] /= norm
 
-                    inputIdsTensor.close()
+                    idTensor.close()
                     maskTensor.close()
                     typeTensor.close()
                     return pooled
                 }
             } catch (_: Exception) {}
         }
-        // Character trigram hashing fallback (384-D) if ONNX is unavailable
         val fallback = FloatArray(384)
         val words = text.lowercase().split(Regex("\\W+")).filter { it.isNotEmpty() }
         for (w in words) {
@@ -216,15 +279,13 @@ class OfflineAiEngine(private val context: Context) {
     }
 
     private fun tokenizeWordPiece(text: String): LongArray {
-        val clsId = vocab["[CLS]"] ?: 101L
-        val sepId = vocab["[SEP]"] ?: 102L
-        val unkId = vocab["[UNK]"] ?: 100L
-        val words = text.lowercase().split(Regex("\\W+")).filter { it.isNotEmpty() }.take(60)
-        val ids = mutableListOf(clsId)
-        for (w in words) {
-            ids.add(vocab[w] ?: unkId)
-        }
-        ids.add(sepId)
+        val cls = vocab["[CLS]"] ?: 101L
+        val sep = vocab["[SEP]"] ?: 102L
+        val unk = vocab["[UNK]"] ?: 100L
+        val words = text.lowercase().split(Regex("\\W+")).filter { it.isNotEmpty() }.take(96)
+        val ids = mutableListOf(cls)
+        for (w in words) ids.add(vocab[w] ?: unk)
+        ids.add(sep)
         return ids.toLongArray()
     }
 
