@@ -1,4 +1,4 @@
-name: Build Offline AI Tablet APK
+name: Build Smart Document Organizer APK
 
 on:
   push:
@@ -23,26 +23,11 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-      - name: Prepare Assets, Strings & Gradle Dependencies
+      - name: Download Offline MiniLM ONNX Model & Vocab
         run: |
-          # 1. Download Offline MiniLM ONNX Model & Vocab
           mkdir -p app/src/main/assets
           curl -L -s "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/vocab.txt" -o app/src/main/assets/vocab.txt
           curl -L -s "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx" -o app/src/main/assets/model_quantized.onnx
-
-          # 2. Ensure strings.xml exists for @string/app_name in accessibility_service_config.xml
-          mkdir -p app/src/main/res/values
-          cat << 'EOF' > app/src/main/res/values/strings.xml
-          <resources>
-              <string name="app_name">Tab A9 Offline AI</string>
-          </resources>
-          EOF
-
-          # 3. Fix ONNX Runtime Maven version and ensure lifecycle-runtime-ktx is present
-          sed -i 's/onnxruntime-android:1.31.1/onnxruntime-android:1.20.0/g' app/build.gradle.kts
-          if ! grep -q "lifecycle-runtime-ktx" app/build.gradle.kts; then
-            sed -i '/appcompat:1.7.0/a \    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")' app/build.gradle.kts
-          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -55,5 +40,5 @@ jobs:
       - name: Upload Compiled APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TabA9-Offline-Assistant-APK
+          name: TabA9-Smart-Document-Organizer-APK
           path: app/build/outputs/apk/debug/app-debug.apk
