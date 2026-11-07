@@ -1,6 +1,12 @@
 {
-  "similarity_threshold": 0.38,
+  "similarity_threshold": 0.36,
   "intents": [
+    {
+      "id": "STOP_ALL",
+      "anchors": "stop all features turn off assistant disable voice listening shut down exit",
+      "keywords": ["stop all", "turn off", "shut down", "disable", "kill switch"],
+      "regex": ""
+    },
     {
       "id": "WHATSAPP_SEND",
       "anchors": "send a whatsapp message to text someone on whatsapp tell person saying",
@@ -15,8 +21,8 @@
     },
     {
       "id": "SORT_FOLDER",
-      "anchors": "organize sort clean arrange files documents in downloads folder",
-      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files"],
+      "anchors": "organize sort clean arrange all files documents in whole tablet storage downloads",
+      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files", "storage"],
       "regex": ""
     },
     {
