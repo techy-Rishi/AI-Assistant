@@ -1,9 +1,15 @@
 package com.assistant.taba9
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -13,6 +19,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.abs
+
+data class ExtractedDocContent(
+    val fullText: String,
+    val spatialLines: List<String>
+)
 
 data class SmartFileDecision(
     val targetRelativeDir: String,
@@ -32,12 +44,10 @@ class FileOrganizer(
             "jpg", "jpeg", "png", "webp", "doc", "docx", "xls", "xlsx", "ppt", "pptx"
         )
 
-        // "ai_organized_files" is NOT blocked so already-classified files are always re-checked & re-classified
         private val PROTECTED_DIRS = setOf(
             "android", "dcim", "music", "movies", "ringtones", "alarms", "notifications"
         )
 
-        // Official headers/words that should NEVER be confused with a human name
         private val NON_NAME_WORDS = setOf(
             "government", "india", "income", "tax", "department", "unique", "identification",
             "authority", "election", "commission", "driving", "licence", "license", "union",
@@ -52,9 +62,12 @@ class FileOrganizer(
             "name", "candidate", "student", "holder", "applicant", "total", "passed", "division",
             "first", "second", "third", "district", "state", "tehsil", "post", "village", "road",
             "house", "pin", "pincode", "mobile", "phone", "email", "help", "www", "http", "https",
-            "download", "date", "issue", "valid", "till", "blood", "group", "organ", "donor",
-            "elector", "photo", "identity", "pan", "tan", "gst", "invoice", "receipt", "bank",
-            "branch", "ifsc", "account", "saving", "current", "passbook", "syllabus", "lecture"
+            "download", "issue", "valid", "till", "blood", "group", "organ", "donor", "elector",
+            "photo", "identity", "pan", "tan", "gst", "invoice", "receipt", "bank", "branch",
+            "ifsc", "account", "saving", "current", "passbook", "syllabus", "lecture", "central",
+            "cbse", "icse", "upmsp", "aktu", "dr", "apj", "abdul", "kalam", "technical", "lucknow",
+            "allahabad", "prayagraj", "delhi", "mumbai", "session", "regular", "private", "theory",
+            "practical", "positional", "subject", "wise", "performance", "cum", "matriculation"
         )
     }
 
@@ -81,7 +94,7 @@ class FileOrganizer(
             return@withContext "No documents, IDs, or images found across tablet storage."
         }
 
-        val summary = StringBuilder("Scanned & Classified ${candidateFiles.size} files:\n")
+        val summary = StringBuilder("Deep-Analyzed ${candidateFiles.size} files (including Scanned PDFs):\n")
         var movedOrUpdatedCount = 0
 
         for (file in candidateFiles) {
@@ -90,9 +103,10 @@ class FileOrganizer(
                 break
             }
 
-            val snippet = extractSnippetSafely(file)
-            val cleanOrigName = stripPreviousAutoTags(file.nameWithoutExtension)
-            val decision = classifyUniversalDocument(cleanOrigName, snippet)
+            // Deep Extraction: Reads text AND runs High-Res OCR on both Images and Scanned PDFs!
+            val extracted = extractDeepContent(file)
+            val cleanOrigName = stripOldGenericNames(file.nameWithoutExtension)
+            val decision = analyzeAndBuildPersonFolder(cleanOrigName, extracted)
 
             val targetDir = File(masterSortedHub, decision.targetRelativeDir)
             if (!targetDir.exists()) targetDir.mkdirs()
@@ -101,14 +115,13 @@ class FileOrganizer(
                 .replace(Regex("[^a-zA-Z0-9_-]"), "_")
                 .replace(Regex("_+"), "_")
                 .trim('_')
-                .ifBlank { cleanOrigName }
+                .ifBlank { "Document" }
 
-            // Check if this exact file is ALREADY in targetDir with the right base name (or _1, _2...)
+            // Skip if file is already in the exact right folder with the exact right base name
             if (isAlreadyProperlyNamedInDir(file, targetDir, sanitizedBase)) {
                 continue
             }
 
-            // Sequential Duplicate Numbering: BaseName.ext -> BaseName_1.ext -> BaseName_2.ext -> BaseName_3.ext
             val destFile = getNextAvailableFile(targetDir, sanitizedBase, file.extension)
 
             if (file.renameTo(destFile)) {
@@ -117,172 +130,290 @@ class FileOrganizer(
             }
         }
 
-        // Remove any empty old folders left inside AI_Organized_Files
         deleteEmptyDirectories(masterSortedHub)
-
-        summary.append("Total moved/renamed: $movedOrUpdatedCount files.")
+        summary.append("Total organized/renamed: $movedOrUpdatedCount files.")
         summary.toString()
     }
 
-    // Checks if file is already inside the right folder with the right base name so re-runs don't bump _1 to _2
-    private fun isAlreadyProperlyNamedInDir(file: File, targetDir: File, expectedBase: String): Boolean {
-        if (file.parentFile?.canonicalPath != targetDir.canonicalPath) return false
-        val currentBase = file.nameWithoutExtension
-        if (currentBase.equals(expectedBase, ignoreCase = true)) return true
-        val numberedRegex = Regex("^${Regex.escape(expectedBase)}_\\d+$", RegexOption.IGNORE_CASE)
-        return numberedRegex.matches(currentBase)
-    }
-
-    // Generates Name_Aadhaar_Card.jpg, and if taken: Name_Aadhaar_Card_1.jpg, Name_Aadhaar_Card_2.jpg...
-    private fun getNextAvailableFile(targetDir: File, baseName: String, ext: String): File {
-        val cleanExt = if (ext.isNotEmpty()) ".$ext" else ""
-        var candidate = File(targetDir, "$baseName$cleanExt")
-        var counter = 1
-        while (candidate.exists()) {
-            candidate = File(targetDir, "${baseName}_$counter$cleanExt")
-            counter++
-        }
-        return candidate
-    }
-
-    private fun classifyUniversalDocument(
+    private fun analyzeAndBuildPersonFolder(
         cleanOrigName: String,
-        snippet: String
+        extracted: ExtractedDocContent
     ): SmartFileDecision {
-        val combinedText = "$snippet\n$cleanOrigName"
-        val lower = combinedText.lowercase()
+        val fullText = "${extracted.fullText}\n$cleanOrigName"
+        val lower = fullText.lowercase()
 
-        // STEP 1: Detect exact Document Type (e.g., Aadhaar_Card, PAN_Card, 10th_Marksheet, etc.)
-        val docInfo = detectDocumentType(lower, combinedText, cleanOrigName)
+        // 1. Detect EXACT Document Type (10th_Marksheet, 12th_Marksheet, Graduation_Sem_3_Marksheet, Aadhaar_Card, etc.)
+        val docInfo = detectSpecificDocumentType(lower, fullText, cleanOrigName)
         val mainCategory = docInfo.first
-        val subCategory = docInfo.second
-        val docTypeName = docInfo.third
+        val specificDocTag = docInfo.second
 
-        // STEP 2: Universal Unknown Person Name Extractor (works for ANY person without a known list)
-        val detectedPerson = extractAnyPersonName(snippet, docTypeName)
-        val personSlug = detectedPerson?.replace(Regex("\\s+"), "_")
+        // 2. Extract Person Name using Spatial Row-Aligned Lines + Structural Heuristics
+        val personName = extractPersonNameFromSpatialLines(extracted.spatialLines, fullText, specificDocTag)
+        val personSlug = personName?.replace(Regex("\\s+"), "_")
 
-        val isPersonDocument = mainCategory in setOf(
+        val isPersonDoc = mainCategory in setOf(
             "Personal_IDs", "Marksheets_Certificates", "Exams_Admissions", "Career_Resumes"
         )
 
-        // STEP 3: Build Target Folder & File Name
-        // Format: <Person_Name>_<DocTypeName> (e.g. Rahul_Sharma_Aadhaar_Card.jpg)
-        val finalBaseName = if (personSlug != null) {
-            "${personSlug}_$docTypeName"
+        // 3. Build Person Folder & Exact File Name:
+        // If person name is found -> Folder: AI_Organized_Files/<Person_Name>/
+        // File inside it -> <Person_Name>_<Specific_Doc_Tag>.ext (e.g., Rohit_Kumar_10th_Marksheet.pdf, Rohit_Kumar_Aadhaar_Card.jpg)
+        return if (personSlug != null) {
+            SmartFileDecision(
+                targetRelativeDir = personSlug,
+                newBaseFileName = "${personSlug}_$specificDocTag"
+            )
+        } else if (isPersonDoc) {
+            SmartFileDecision(
+                targetRelativeDir = "Unidentified_Person_Docs/$mainCategory",
+                newBaseFileName = specificDocTag
+            )
         } else {
-            docTypeName
+            SmartFileDecision(
+                targetRelativeDir = mainCategory,
+                newBaseFileName = specificDocTag
+            )
         }
-
-        val relativeDir = when {
-            personSlug != null -> {
-                // Organizes by that person's name: People_Records/Rahul_Sharma/Personal_IDs
-                "People_Records/$personSlug/$mainCategory"
-            }
-            isPersonDocument -> {
-                "$mainCategory/$subCategory"
-            }
-            subCategory.isNotEmpty() -> {
-                "$mainCategory/$subCategory"
-            }
-            else -> mainCategory
-        }
-
-        return SmartFileDecision(relativeDir, finalBaseName)
     }
 
-    // Universal Unknown Person Name Extractor — scans OCR/PDF lines structurally
-    private fun extractAnyPersonName(rawSnippet: String, docType: String): String? {
-        val lines = rawSnippet.lines()
-            .map { it.trim().replace(Regex("\\s+"), " ") }
-            .filter { it.isNotEmpty() }
+    // Distinguishes 10th, 12th, Graduation (B.Tech/B.Sc/BA + Semester), Diploma, Aadhaar, PAN, Certificates, etc.
+    private fun detectSpecificDocumentType(
+        lower: String,
+        rawText: String,
+        cleanOrigName: String
+    ): Pair<String, String> {
 
-        // 1. Explicit Label Match (Marksheets, Certificates, Admit Cards, Resumes, IDs)
-        // Matches: "Name : ...", "Candidate's Name : ...", "Student Name : ...", "Certify that ..."
-        val labelRegexes = listOf(
-            Regex("(?:candidate'?s?\\s*name|student'?s?\\s*name|name\\s*of\\s*(?:the\\s*)?(?:student|candidate|applicant|holder|cardholder)|applicant'?s?\\s*name)\\s*[:\\.-]?\\s*(?:mr\\.?|ms\\.?|mrs\\.?|shri|smt|km\\.?|kumari)?\\s*([A-Za-z]+(?:\\s+[A-Za-z]+){1,2})", RegexOption.IGNORE_CASE),
-            Regex("(?:this\\s+is\\s+to\\s+certify\\s+that|certified\\s+that|certify\\s+that|awarded\\s+to|presented\\s+to)\\s+(?:mr\\.?|ms\\.?|mrs\\.?|shri|smt|km\\.?|kumari)?\\s*([A-Za-z]+(?:\\s+[A-Za-z]+){1,2})", RegexOption.IGNORE_CASE),
-            Regex("(?:^|\\n)\\s*name\\s*[:\\.-]\\s*(?:mr\\.?|ms\\.?|mrs\\.?|shri|smt|km\\.?)?\\s*([A-Za-z]+(?:\\s+[A-Za-z]+){1,2})", RegexOption.IGNORE_CASE)
+        // --- A. PERSONAL IDs ---
+        val aadhaarMatch = Regex("\\b\\d{4}[\\s-]\\d{4}[\\s-]\\d{4}\\b").find(rawText)
+        if (aadhaarMatch != null || lower.contains("unique identification") || lower.contains("uidai") ||
+            lower.contains("mera aadhaar") || lower.contains("aadhaar") || lower.contains("आधार")
+        ) {
+            return Pair("Personal_IDs", "Aadhaar_Card")
+        }
+
+        val panMatch = Regex("\\b[A-Z]{5}[0-9]{4}[A-Z]\\b").find(rawText.uppercase())
+        if (panMatch != null || lower.contains("income tax department") || lower.contains("permanent account number") || lower.contains("pan card")) {
+            return Pair("Personal_IDs", "PAN_Card")
+        }
+
+        val voterMatch = Regex("\\b[A-Z]{3}[0-9]{7}\\b").find(rawText.uppercase())
+        if (voterMatch != null || lower.contains("election commission") || lower.contains("elector photo") || lower.contains("voter")) {
+            return Pair("Personal_IDs", "Voter_ID_Card")
+        }
+
+        if (lower.contains("driving licence") || lower.contains("driving license") || lower.contains("transport department")) {
+            return Pair("Personal_IDs", "Driving_License")
+        }
+
+        if (lower.contains("passport") || lower.contains("republic of india")) {
+            return Pair("Personal_IDs", "Passport")
+        }
+
+        // --- B. 10th / 12th / GRADUATION MARKSHEETS (DEEP ANALYSIS) ---
+        val isMarksheetOrResult = lower.contains("marksheet") || lower.contains("marks statement") ||
+                lower.contains("statement of marks") || lower.contains("grade sheet") ||
+                lower.contains("high school") || lower.contains("intermediate") ||
+                lower.contains("secondary school") || lower.contains("senior school") ||
+                lower.contains("matriculation") || lower.contains("roll no") ||
+                lower.contains("roll number") || lower.contains("maximum marks") ||
+                lower.contains("marks obtained") || lower.contains("theory") ||
+                lower.contains("sgpa") || lower.contains("cgpa") || lower.contains("semester")
+
+        if (isMarksheetOrResult && !lower.contains("admit card") && !lower.contains("hall ticket")) {
+            // 1. Check GRADUATION / UNIVERSITY (B.Tech, B.E, B.Sc, B.A, B.Com, M.Tech, MCA, MBA, Semester, SGPA, CGPA)
+            val isGraduation = lower.contains("bachelor") || lower.contains("b.tech") || lower.contains("btech") ||
+                    lower.contains("b.sc") || lower.contains("b.a.") || lower.contains("b.com") ||
+                    lower.contains("university") || lower.contains("institute of technology") ||
+                    lower.contains("aktu") || lower.contains("sgpa") || lower.contains("cgpa") ||
+                    lower.contains("semester") || lower.contains("credit")
+
+            if (isGraduation) {
+                val semMatch = Regex("(?:semester|sem)\\s*[:\\.-]?\\s*([1-8]|viii|vii|vi|v|iv|iii|ii|i)\\b", RegexOption.IGNORE_CASE).find(rawText)
+                val yearMatch = Regex("(?:year|yr)\\s*[:\\.-]?\\s*([1-4]|iv|iii|ii|i)\\b", RegexOption.IGNORE_CASE).find(rawText)
+                val suffix = when {
+                    semMatch != null -> "Graduation_Sem_${semMatch.groupValues[1].uppercase()}_Marksheet"
+                    yearMatch != null -> "Graduation_Year_${yearMatch.groupValues[1].uppercase()}_Marksheet"
+                    lower.contains("final") || lower.contains("degree") || lower.contains("provisional") -> "Graduation_Degree_Marksheet"
+                    else -> "Graduation_Marksheet"
+                }
+                return Pair("Marksheets_Certificates", suffix)
+            }
+
+            // 2. Check 12th (INTERMEDIATE / SENIOR SECONDARY / CLASS XII)
+            // Also checks subject combinations: Physics + Chemistry + (Mathematics/Biology) without Social Science = 12th!
+            val has12thKeywords = lower.contains("intermediate") || lower.contains("senior school") ||
+                    lower.contains("senior secondary") || lower.contains("higher secondary") ||
+                    lower.contains("class xii") || lower.contains("class 12") || lower.contains("12th") ||
+                    lower.contains("10+2") || lower.contains("inter examination")
+            val has12thSubjects = (lower.contains("physics") && lower.contains("chemistry") && !lower.contains("social science")) ||
+                    (lower.contains("accountancy") && lower.contains("business studies"))
+
+            if (has12thKeywords || has12thSubjects) {
+                return Pair("Marksheets_Certificates", "12th_Marksheet")
+            }
+
+            // 3. Check 10th (HIGH SCHOOL / SECONDARY SCHOOL / MATRICULATION / CLASS X)
+            // Subject check: Social Science / Science + Mathematics + Hindi/English = 10th!
+            val has10thKeywords = lower.contains("high school") || lower.contains("secondary school") ||
+                    lower.contains("matriculation") || lower.contains("class x") ||
+                    lower.contains("class 10") || lower.contains("10th") || lower.contains("highschool")
+            val has10thSubjects = lower.contains("social science") || (lower.contains("science") && !lower.contains("computer science") && !lower.contains("physics"))
+
+            if (has10thKeywords || has10thSubjects) {
+                return Pair("Marksheets_Certificates", "10th_Marksheet")
+            }
+
+            // 4. Check Diploma / Polytechnic
+            if (lower.contains("diploma") || lower.contains("polytechnic") || lower.contains("bteup")) {
+                return Pair("Marksheets_Certificates", "Diploma_Marksheet")
+            }
+
+            return Pair("Marksheets_Certificates", "Academic_Marksheet")
+        }
+
+        // --- C. GOVT & COLLEGE CERTIFICATES ---
+        if (lower.contains("caste certificate") || lower.contains("jati praman") || lower.contains("backward class") || lower.contains("scheduled caste") || lower.contains("जाति प्रमाण")) {
+            return Pair("Marksheets_Certificates", "Caste_Certificate")
+        }
+        if (lower.contains("income certificate") || lower.contains("aay praman") || lower.contains("annual income") || lower.contains("आय प्रमाण")) {
+            return Pair("Marksheets_Certificates", "Income_Certificate")
+        }
+        if (lower.contains("domicile") || lower.contains("residence certificate") || lower.contains("niwas praman") || lower.contains("निवास प्रमाण")) {
+            return Pair("Marksheets_Certificates", "Domicile_Certificate")
+        }
+        if (lower.contains("transfer certificate") || lower.contains("migration") || lower.contains("character certificate")) {
+            return Pair("Marksheets_Certificates", "Transfer_Migration_Certificate")
+        }
+        if (lower.contains("certificate") || lower.contains("nptel") || lower.contains("swayam") || lower.contains("workshop")) {
+            return Pair("Marksheets_Certificates", extractTopicTag(rawText, cleanOrigName, "Certificate"))
+        }
+
+        // --- D. EXAMS, ADMIT CARDS & SCORECARDS ---
+        if (lower.contains("admit card") || lower.contains("hall ticket") || lower.contains("e-admit")) {
+            val exam = when {
+                lower.contains("gate") -> "GATE_Admit_Card"
+                lower.contains("ugc") || lower.contains("net") -> "UGC_NET_Admit_Card"
+                lower.contains("jee") -> "JEE_Admit_Card"
+                else -> "Admit_Card"
+            }
+            return Pair("Exams_Admissions", exam)
+        }
+        if (lower.contains("scorecard") || lower.contains("score card") || lower.contains("rank card") || lower.contains("jrf")) {
+            val exam = when {
+                lower.contains("gate") -> "GATE_Scorecard"
+                lower.contains("ugc") || lower.contains("net") -> "UGC_NET_Scorecard"
+                else -> "Exam_Scorecard"
+            }
+            return Pair("Exams_Admissions", exam)
+        }
+
+        // --- E. RESUME & CAREER ---
+        if (lower.contains("curriculum vitae") || lower.contains("resume") || (lower.contains("skills") && lower.contains("education") && lower.contains("projects"))) {
+            return Pair("Career_Resumes", "Resume_CV")
+        }
+
+        // --- F. FINANCE & BANKING ---
+        if (lower.contains("passbook") || lower.contains("bank statement") || lower.contains("ifsc")) {
+            return Pair("Finance_Bills_Receipts", "Bank_Passbook_Statement")
+        }
+        if (lower.contains("invoice") || lower.contains("gstin") || lower.contains("receipt") || lower.contains("bill")) {
+            return Pair("Finance_Bills_Receipts", extractTopicTag(rawText, cleanOrigName, "Invoice_Receipt"))
+        }
+
+        // --- G. STUDY NOTES & RESEARCH PAPERS ---
+        if (lower.contains("abstract") && lower.contains("introduction") && (lower.contains("references") || lower.contains("ieee"))) {
+            return Pair("Academic_Study_Material", extractTopicTag(rawText, cleanOrigName, "Research_Paper"))
+        }
+        val aiCat = aiEngine.classifyFileContent(rawText)
+        return Pair(aiCat, extractTopicTag(rawText, cleanOrigName, "Document"))
+    }
+
+    // Uses spatially reconstructed rows (where left-column label and right-column value are joined on the same line!)
+    private fun extractPersonNameFromSpatialLines(
+        spatialLines: List<String>,
+        fullText: String,
+        docTag: String
+    ): String? {
+        val allLines = if (spatialLines.isNotEmpty()) spatialLines else fullText.lines()
+
+        // 1. Check row-aligned lines for Student / Candidate / Cardholder Name
+        // Note: We EXCLUDE "Father's Name" and "Mother's Name" so the student's own name is picked first!
+        val primaryNameRegexes = listOf(
+            Regex("(?<!father'?s?\\s)(?<!mother'?s?\\s)(?<!guardian'?s?\\s)(?:candidate'?s?\\s*name|student'?s?\\s*name|name\\s*of\\s*(?:the\\s*)?(?:student|candidate|applicant|cardholder|holder)|applicant'?s?\\s*name|प्रमाणित किया जाता है कि|certify\\s+that|awarded\\s+to)\\s*[:\\.-]?\\s*(?:mr\\.?|ms\\.?|mrs\\.?|shri|smt|km\\.?|kumari)?\\s*([A-Za-z]+(?:\\s+[A-Za-z]+){1,3})", RegexOption.IGNORE_CASE),
+            Regex("(?<!father'?s?\\s)(?<!mother'?s?\\s)(?:^|\\s)name\\s*[:\\.-]?\\s*(?:mr\\.?|ms\\.?|mrs\\.?|shri|smt|km\\.?|kumari)?\\s*([A-Za-z]+(?:\\s+[A-Za-z]+){1,3})", RegexOption.IGNORE_CASE)
         )
 
-        for (regex in labelRegexes) {
-            for (match in regex.findAll(rawSnippet)) {
-                val candidate = cleanExtractedName(match.groupValues[1])
-                if (candidate != null) return candidate
+        for (line in allLines) {
+            val lowerLine = line.lowercase()
+            if (lowerLine.contains("father") || lowerLine.contains("mother") || lowerLine.contains("school name") || lowerLine.contains("college name") || lowerLine.contains("bank name")) {
+                continue
+            }
+            for (regex in primaryNameRegexes) {
+                val match = regex.find(line)
+                if (match != null) {
+                    val valid = validateAndFormatPersonName(match.groupValues[1])
+                    if (valid != null) return valid
+                }
             }
         }
 
-        // 2. Multi-Line Label Check (When "Name" or "Candidate's Name" is on Line i, and actual name is on Line i+1)
-        for (i in 0 until lines.size - 1) {
-            val l = lines[i].lowercase()
-            if (l in setOf("name", "name:", "candidate's name", "student's name", "name / नाम", "नाम / name")) {
-                val nextLineCandidate = cleanExtractedName(lines[i + 1])
-                if (nextLineCandidate != null) return nextLineCandidate
+        // 2. Check if Label is on Line i and Student Name is on Line i+1
+        for (i in 0 until allLines.size - 1) {
+            val l = allLines[i].lowercase().trim()
+            if ((l.contains("candidate's name") || l.contains("student's name") || l.contains("name of candidate") || l.contains("name of student") || l == "name" || l == "name:") &&
+                !l.contains("father") && !l.contains("mother")
+            ) {
+                val nextLineName = validateAndFormatPersonName(allLines[i + 1])
+                if (nextLineName != null) return nextLineName
             }
         }
 
-        // 3. Aadhaar Card Structural Heuristic:
-        // On every Aadhaar card, the cardholder's English name sits 1 or 2 lines ABOVE "DOB:", "Year of Birth", "S/O", "D/O", "W/O", or "Male/Female"
-        for (i in lines.indices) {
-            val l = lines[i].lowercase()
-            val isDobOrRelationAnchor = l.contains("dob") || l.contains("year of birth") ||
-                    l.contains("जन्म तिथि") || l.contains("s/o") || l.contains("d/o") ||
-                    l.contains("w/o") || l.contains("c/o") || l.contains("father")
-
-            if (isDobOrRelationAnchor) {
-                // Check 1 line above and 2 lines above (in case Hindi name is between English name and DOB)
+        // 3. Aadhaar Card / ID Card Heuristic: Name sits 1 or 2 lines ABOVE "DOB", "Year of Birth", "S/O", "D/O", "W/O", "Father"
+        for (i in allLines.indices) {
+            val l = allLines[i].lowercase()
+            if (l.contains("dob") || l.contains("date of birth") || l.contains("year of birth") ||
+                l.contains("जन्म तिथि") || l.contains("s/o") || l.contains("d/o") ||
+                l.contains("w/o") || l.contains("father's name") || l.contains("पिता का नाम")
+            ) {
                 for (offset in 1..2) {
                     if (i - offset >= 0) {
-                        val possibleName = cleanExtractedName(lines[i - offset])
-                        if (possibleName != null) return possibleName
+                        val prevLine = allLines[i - offset]
+                        if (!prevLine.lowercase().contains("mother")) {
+                            val candidate = validateAndFormatPersonName(prevLine)
+                            if (candidate != null) return candidate
+                        }
                     }
                 }
             }
-
-            // Aadhaar letter top section has "To" followed by Name
-            if (l == "to" && i + 2 < lines.size) {
-                val toName = cleanExtractedName(lines[i + 1]) ?: cleanExtractedName(lines[i + 2])
-                if (toName != null) return toName
-            }
         }
 
-        // 4. PAN Card Structural Heuristic:
-        // On PAN cards, the cardholder's name is in uppercase right below "INCOME TAX DEPARTMENT" / "GOVT. OF INDIA" and above Father's Name / DOB
-        if (docType.contains("PAN", ignoreCase = true)) {
-            for (line in lines) {
-                val possibleName = cleanExtractedName(line)
-                if (possibleName != null) return possibleName
-            }
-        }
-
-        // 5. Resume / CV Heuristic: The very first valid 2-3 word human name in the top 5 lines of a Resume
-        if (docType.contains("Resume", ignoreCase = true)) {
-            for (line in lines.take(5)) {
-                val possibleName = cleanExtractedName(line)
-                if (possibleName != null) return possibleName
+        // 4. PAN Card / General ID Heuristic: Look for clean 2-3 word all-letter lines that aren't headers
+        if (docTag.contains("PAN") || docTag.contains("Aadhaar") || docTag.contains("Marksheet") || docTag.contains("Resume")) {
+            for (line in allLines.take(25)) {
+                val lowerLine = line.lowercase()
+                if (lowerLine.contains("father") || lowerLine.contains("mother")) continue
+                val candidate = validateAndFormatPersonName(line)
+                if (candidate != null) return candidate
             }
         }
 
         return null
     }
 
-    // Validates and formats a raw string into "First Last" Title Case if it's a real human name
-    private fun cleanExtractedName(rawLine: String): String? {
-        // Strip common relation suffixes if they got attached on the same line
-        val stripped = rawLine
-            .replace(Regex("(?i)\\b(s/o|d/o|w/o|c/o|dob|male|female|mr\\.?|ms\\.?|mrs\\.?|shri|smt|kumari).*"), "")
+    private fun validateAndFormatPersonName(rawInput: String): String? {
+        val cleaned = rawInput
+            .replace(Regex("(?i)\\b(s/o|d/o|w/o|c/o|dob|male|female|mr\\.?|ms\\.?|mrs\\.?|shri|smt|kumari|km\\.?|roll|reg|no).*"), "")
             .replace(Regex("[^a-zA-Z\\s]"), " ")
             .trim()
             .replace(Regex("\\s+"), " ")
 
-        val words = stripped.split(" ").filter { it.isNotEmpty() }
+        val words = cleaned.split(" ").filter { it.isNotEmpty() }
         if (words.size !in 2..3) return null
 
         for (w in words) {
             val lw = w.lowercase()
             if (w.length < 2 || w.length > 15) return null
             if (lw in NON_NAME_WORDS) return null
-            // Reject words with no vowels (OCR garbage like "XJkL")
             if (!lw.any { it in "aeiouy" }) return null
         }
 
@@ -291,148 +422,138 @@ class FileOrganizer(
         }
     }
 
-    // Detects exact document type and returns Triple(MainCategory, SubCategory, CleanDocTypeSuffix)
-    private fun detectDocumentType(
-        lower: String,
-        rawCombined: String,
-        cleanOrigName: String
-    ): Triple<String, String, String> {
-
-        // --- 1. PERSONAL IDs ---
-        val aadhaarMatch = Regex("\\b\\d{4}[\\s-]\\d{4}[\\s-]\\d{4}\\b").find(rawCombined)
-        if (aadhaarMatch != null || lower.contains("unique identification") || lower.contains("uidai") || lower.contains("aadhaar") || lower.contains("mera aadhaar") || lower.contains("adhar")) {
-            return Triple("Personal_IDs", "Aadhaar_Cards", "Aadhaar_Card")
-        }
-
-        val panMatch = Regex("\\b[A-Z]{5}[0-9]{4}[A-Z]\\b").find(rawCombined.uppercase())
-        if (panMatch != null || lower.contains("income tax department") || lower.contains("permanent account number") || lower.contains("pan card")) {
-            return Triple("Personal_IDs", "PAN_Cards", "PAN_Card")
-        }
-
-        val voterMatch = Regex("\\b[A-Z]{3}[0-9]{7}\\b").find(rawCombined.uppercase())
-        if (voterMatch != null || lower.contains("election commission") || lower.contains("elector photo") || lower.contains("voter")) {
-            return Triple("Personal_IDs", "Voter_IDs", "Voter_ID_Card")
-        }
-
-        if (lower.contains("driving licence") || lower.contains("driving license") || lower.contains("transport department")) {
-            return Triple("Personal_IDs", "Driving_Licenses", "Driving_License")
-        }
-
-        if (lower.contains("passport") || lower.contains("republic of india")) {
-            return Triple("Personal_IDs", "Passports", "Passport")
-        }
-
-        if (lower.contains("ration card") || lower.contains("food and civil supplies")) {
-            return Triple("Personal_IDs", "Ration_Cards", "Ration_Card")
-        }
-
-        // --- 2. MARKSHEETS & CERTIFICATES ---
-        if (lower.contains("marksheet") || lower.contains("marks statement") || lower.contains("statement of marks") ||
-            lower.contains("grade sheet") || lower.contains("high school") || lower.contains("intermediate") ||
-            lower.contains("secondary education") || (lower.contains("semester") && (lower.contains("sgpa") || lower.contains("cgpa") || lower.contains("marks")))
-        ) {
-            val docTag = when {
-                lower.contains("high school") || lower.contains("class x") || lower.contains("10th") || lower.contains("secondary school examination") -> "10th_Marksheet"
-                lower.contains("intermediate") || lower.contains("class xii") || lower.contains("12th") || lower.contains("senior school") -> "12th_Marksheet"
-                Regex("semester\\s*[1-8]|sem\\s*[1-8]|b\\.?tech").containsMatchIn(lower) -> {
-                    val sem = Regex("(?:semester|sem)\\s*([1-8]|[i|v|x]+)").find(lower)?.groupValues?.getOrNull(1)?.uppercase() ?: ""
-                    if (sem.isNotEmpty()) "BTech_Sem_${sem}_Marksheet" else "BTech_Marksheet"
+    // CORE UPGRADE: Reads both Digital Text AND Renders Scanned PDFs to Bitmap for Spatial OCR!
+    private suspend fun extractDeepContent(file: File): ExtractedDocContent {
+        return try {
+            when (file.extension.lowercase()) {
+                "txt", "md", "csv", "json", "py", "kt", "java", "xml", "html" -> {
+                    val text = file.bufferedReader().use { reader ->
+                        val buf = CharArray(3000)
+                        val read = reader.read(buf, 0, 3000)
+                        if (read > 0) String(buf, 0, read) else ""
+                    }
+                    ExtractedDocContent(text, text.lines())
                 }
-                else -> "Marksheet"
+                "pdf" -> {
+                    // Step 1: Try Digital Text Extraction via PDFBox
+                    var digitalText = ""
+                    try {
+                        PDDocument.load(file).use { doc ->
+                            val stripper = PDFTextStripper().apply {
+                                startPage = 1
+                                endPage = doc.numberOfPages.coerceAtMost(2)
+                            }
+                            digitalText = stripper.getText(doc).trim()
+                        }
+                    } catch (_: Exception) {}
+
+                    // Step 2: If PDF is a Scanned Image (digitalText has < 40 chars), render Page 1 to Bitmap & run ML Kit OCR!
+                    if (digitalText.length < 40) {
+                        runOcrOnScannedPdf(file)
+                    } else {
+                        ExtractedDocContent(digitalText.take(3000), digitalText.lines())
+                    }
+                }
+                "jpg", "jpeg", "png", "webp" -> {
+                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, boundsOpts)
+                    val maxDim = maxOf(boundsOpts.outWidth, boundsOpts.outHeight)
+                    val sampleSize = if (maxDim > 2800) 2 else 1
+
+                    val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                    val bmp = BitmapFactory.decodeFile(file.absolutePath, decodeOpts)
+                        ?: return ExtractedDocContent("", emptyList())
+                    val result = runSpatialOcrOnBitmap(bmp)
+                    bmp.recycle()
+                    result
+                }
+                else -> ExtractedDocContent(file.nameWithoutExtension, listOf(file.nameWithoutExtension))
             }
-            return Triple("Marksheets_Certificates", "Marksheets", docTag)
+        } catch (_: Exception) {
+            ExtractedDocContent(file.nameWithoutExtension, listOf(file.nameWithoutExtension))
         }
-
-        if (lower.contains("caste certificate") || lower.contains("jati praman") || lower.contains("backward class") || lower.contains("scheduled caste")) {
-            return Triple("Marksheets_Certificates", "Govt_Certificates", "Caste_Certificate")
-        }
-        if (lower.contains("income certificate") || lower.contains("aay praman") || lower.contains("annual income")) {
-            return Triple("Marksheets_Certificates", "Govt_Certificates", "Income_Certificate")
-        }
-        if (lower.contains("domicile") || lower.contains("residence certificate") || lower.contains("niwas praman")) {
-            return Triple("Marksheets_Certificates", "Govt_Certificates", "Domicile_Certificate")
-        }
-        if (lower.contains("transfer certificate") || lower.contains("migration certificate") || lower.contains("character certificate")) {
-            return Triple("Marksheets_Certificates", "School_Certificates", "Migration_TC_Certificate")
-        }
-        if (lower.contains("certificate")) {
-            return Triple("Marksheets_Certificates", "Certificates", "Certificate")
-        }
-
-        // --- 3. EXAMS & ADMISSIONS ---
-        if (lower.contains("admit card") || lower.contains("hall ticket") || lower.contains("e-admit")) {
-            val examTag = when {
-                lower.contains("gate") -> "GATE_Admit_Card"
-                lower.contains("ugc") || lower.contains("net") -> "UGC_NET_Admit_Card"
-                else -> "Admit_Card"
-            }
-            return Triple("Exams_Admissions", "Admit_Cards", examTag)
-        }
-        if (lower.contains("scorecard") || lower.contains("score card") || lower.contains("rank card") || lower.contains("jrf")) {
-            return Triple("Exams_Admissions", "Scorecards", "Scorecard")
-        }
-        if (lower.contains("allotment") || lower.contains("counselling") || lower.contains("application form") || lower.contains("confirmation page")) {
-            return Triple("Exams_Admissions", "Admission_Docs", "Application_Form")
-        }
-
-        // --- 4. RESUMES & CAREER ---
-        if (lower.contains("curriculum vitae") || lower.contains("resume") || (lower.contains("skills") && lower.contains("education") && lower.contains("projects"))) {
-            return Triple("Career_Resumes", "Resumes", "Resume")
-        }
-        if (lower.contains("offer letter") || lower.contains("appointment letter") || lower.contains("internship")) {
-            return Triple("Career_Resumes", "Offer_Letters", "Offer_Letter")
-        }
-
-        // --- 5. FINANCE & BILLS ---
-        if (lower.contains("bank statement") || lower.contains("passbook") || lower.contains("ifsc")) {
-            return Triple("Finance_Bills_Receipts", "Bank_Docs", "Bank_Passbook_Statement")
-        }
-        if (lower.contains("irctc") || lower.contains("boarding pass") || lower.contains("pnr") || lower.contains("e-ticket")) {
-            return Triple("Finance_Bills_Receipts", "Tickets", "Travel_Ticket")
-        }
-        if (lower.contains("invoice") || lower.contains("gstin") || lower.contains("receipt") || lower.contains("bill amount") || lower.contains("upi")) {
-            return Triple("Finance_Bills_Receipts", "Invoices_Bills", "Invoice_Receipt")
-        }
-
-        // --- 6. ACADEMIC STUDY MATERIAL & RESEARCH PAPERS ---
-        if (lower.contains("abstract") && lower.contains("introduction") && (lower.contains("references") || lower.contains("methodology") || lower.contains("ieee"))) {
-            val title = extractTopicTitle(rawCombined, cleanOrigName, "Research_Paper")
-            return Triple("Academic_Study_Material", "Research_Papers", title)
-        }
-
-        val aiCat = aiEngine.classifyFileContent(rawCombined)
-        if (aiCat == "Academic_Study_Material" || lower.contains("syllabus") || lower.contains("lecture") || lower.contains("algorithm") || lower.contains("operating system") || lower.contains("gate")) {
-            val subject = when {
-                lower.contains("operating system") || lower.contains("deadlock") || lower.contains("cpu scheduling") -> "Operating_Systems"
-                lower.contains("algorithm") || lower.contains("data structure") || lower.contains("dynamic programming") -> "DSA_Algorithms"
-                lower.contains("computer network") || lower.contains("tcp/ip") || lower.contains("osi model") -> "Computer_Networks"
-                lower.contains("database") || lower.contains("sql") || lower.contains("normalization") -> "DBMS"
-                lower.contains("compiler") || lower.contains("automata") || lower.contains("toc") -> "TOC_Compiler"
-                lower.contains("machine learning") || lower.contains("computer vision") || lower.contains("lane detection") || lower.contains("neural") -> "AI_Computer_Vision"
-                lower.contains("discrete") || lower.contains("engineering mathematics") || lower.contains("linear algebra") -> "Mathematics"
-                lower.contains("syllabus") -> "Syllabus"
-                else -> "CS_Notes"
-            }
-            val title = extractTopicTitle(rawCombined, cleanOrigName, subject)
-            return Triple("Academic_Study_Material", subject, title)
-        }
-
-        if (aiCat == "Code_And_Data") {
-            return Triple("Code_And_Data", "Source_Files", cleanOrigName)
-        }
-
-        val fallbackTitle = extractTopicTitle(rawCombined, cleanOrigName, "Document")
-        return Triple(aiCat, "General", fallbackTitle)
     }
 
-    // Strips old auto-generated prefixes and random numbers so re-classification produces a fresh, clean name
-    private fun stripPreviousAutoTags(name: String): String {
+    // Renders Page 1 of a Scanned PDF into a crisp Bitmap using Android's native PdfRenderer and runs OCR
+    private suspend fun runOcrOnScannedPdf(pdfFile: File): ExtractedDocContent {
+        var pfd: ParcelFileDescriptor? = null
+        var renderer: PdfRenderer? = null
+        return try {
+            pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            renderer = PdfRenderer(pfd)
+            if (renderer.pageCount == 0) return ExtractedDocContent("", emptyList())
+
+            val page = renderer.openPage(0)
+            // Render at 2x scale (approx 150-200 DPI) on a white background so OCR reads small marksheet text clearly
+            val width = (page.width * 2).coerceAtMost(2200)
+            val height = (page.height * 2).coerceAtMost(2800)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.drawColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+
+            val ocrContent = runSpatialOcrOnBitmap(bitmap)
+            bitmap.recycle()
+            ocrContent
+        } catch (_: Exception) {
+            ExtractedDocContent("", emptyList())
+        } finally {
+            try { renderer?.close() } catch (_: Exception) {}
+            try { pfd?.close() } catch (_: Exception) {}
+        }
+    }
+
+    // Groups ML Kit OCR lines by their Y-coordinate (vertical position) so table columns stay on the same line!
+    // Example: Left column "Candidate's Name" (Y=410) + Right column "ROHIT KUMAR" (Y=412) -> "Candidate's Name : ROHIT KUMAR"
+    private suspend fun runSpatialOcrOnBitmap(bitmap: Bitmap): ExtractedDocContent {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val visionText: Text = ocrRecognizer.process(image).await()
+
+        val allLines = mutableListOf<Text.Line>()
+        for (block in visionText.textBlocks) {
+            allLines.addAll(block.lines)
+        }
+
+        if (allLines.isEmpty()) return ExtractedDocContent("", emptyList())
+
+        // Sort all detected text lines top-to-bottom by Y coordinate
+        val sortedByY = allLines.sortedBy { it.boundingBox?.centerY() ?: 0 }
+
+        val reconstructedRows = mutableListOf<MutableList<Text.Line>>()
+        val yTolerancePx = 24 // Lines within 24px vertically belong to the same horizontal table row
+
+        for (line in sortedByY) {
+            val cy = line.boundingBox?.centerY() ?: 0
+            val existingRow = reconstructedRows.lastOrNull { row ->
+                val rowY = row.first().boundingBox?.centerY() ?: 0
+                abs(cy - rowY) <= yTolerancePx
+            }
+            if (existingRow != null) {
+                existingRow.add(line)
+            } else {
+                reconstructedRows.add(mutableListOf(line))
+            }
+        }
+
+        // Sort each horizontal row left-to-right by X coordinate and join with " : "
+        val spatialRowStrings = reconstructedRows.map { row ->
+            row.sortedBy { it.boundingBox?.left ?: 0 }
+                .joinToString(" : ") { it.text.trim() }
+        }
+
+        val combinedFullText = spatialRowStrings.joinToString("\n")
+        return ExtractedDocContent(combinedFullText.take(3500), spatialRowStrings)
+    }
+
+    // Strips old broken names like "Marksheet_1", "Marksheet_2", "Document_1" so re-classification starts fresh
+    private fun stripOldGenericNames(name: String): String {
         return name
             .replace(Regex("_\\d+$"), "")
-            .replace(Regex("(?i)^(Certificate|Invoice|Academic_Notes|Personal_IDs|General_Notes|DSA_Algorithms|Operating_Systems|Doc|Document|Aadhaar_Card|PAN_Card)_+"), "")
+            .replace(Regex("(?i)^(Academic_Marksheet|Marksheet|Certificate|Invoice|Document|Doc|Aadhaar_Card|PAN_Card)_*"), "")
     }
 
-    private fun extractTopicTitle(rawText: String, origName: String, prefix: String): String {
+    private fun extractTopicTag(rawText: String, origName: String, prefix: String): String {
         if (!isGenericFilename(origName) && origName.length >= 4) {
             return origName
         }
@@ -440,10 +561,11 @@ class FileOrganizer(
             .map { it.replace(Regex("[^a-zA-Z0-9]"), "") }
             .filter { w ->
                 w.length in 4..14 &&
-                        w.lowercase() !in setOf("this", "that", "with", "from", "have", "your", "page", "date", "http", "https")
+                        w.lowercase() !in NON_NAME_WORDS &&
+                        w.lowercase() !in setOf("this", "that", "with", "from", "have", "your", "page")
             }
             .distinctBy { it.lowercase() }
-            .take(3)
+            .take(2)
         return if (words.isNotEmpty()) {
             "${prefix}_${words.joinToString("_")}"
         } else {
@@ -453,9 +575,30 @@ class FileOrganizer(
 
     private fun isGenericFilename(name: String): Boolean {
         val lower = name.lowercase()
-        return lower.startsWith("img") || lower.startsWith("wa0") || lower.startsWith("scan") ||
-                lower.startsWith("screenshot") || lower.startsWith("doc") || lower.startsWith("whatsapp") ||
-                lower.startsWith("camscanner") || lower.startsWith("adobe") || lower.matches(Regex("^[0-9_-]+$"))
+        return lower.isBlank() || lower.startsWith("img") || lower.startsWith("wa0") ||
+                lower.startsWith("scan") || lower.startsWith("screenshot") ||
+                lower.startsWith("doc") || lower.startsWith("marksheet") ||
+                lower.startsWith("whatsapp") || lower.startsWith("camscanner") ||
+                lower.startsWith("adobe") || lower.matches(Regex("^[0-9_-]+$"))
+    }
+
+    private fun isAlreadyProperlyNamedInDir(file: File, targetDir: File, expectedBase: String): Boolean {
+        if (file.parentFile?.canonicalPath != targetDir.canonicalPath) return false
+        val currentBase = file.nameWithoutExtension
+        if (currentBase.equals(expectedBase, ignoreCase = true)) return true
+        val numberedRegex = Regex("^${Regex.escape(expectedBase)}_\\d+$", RegexOption.IGNORE_CASE)
+        return numberedRegex.matches(currentBase)
+    }
+
+    private fun getNextAvailableFile(targetDir: File, baseName: String, ext: String): File {
+        val cleanExt = if (ext.isNotEmpty()) ".$ext" else ""
+        var candidate = File(targetDir, "$baseName$cleanExt")
+        var counter = 1
+        while (candidate.exists()) {
+            candidate = File(targetDir, "${baseName}_$counter$cleanExt")
+            counter++
+        }
+        return candidate
     }
 
     private fun collectManageableFiles(dir: File, outList: MutableList<File>, maxDepth: Int, currentDepth: Int) {
@@ -484,45 +627,6 @@ class FileOrganizer(
                     child.delete()
                 }
             }
-        }
-    }
-
-    private suspend fun extractSnippetSafely(file: File): String {
-        return try {
-            when (file.extension.lowercase()) {
-                "txt", "md", "csv", "json", "py", "kt", "java", "xml", "html" -> {
-                    file.bufferedReader().use { reader ->
-                        val buf = CharArray(2500)
-                        val read = reader.read(buf, 0, 2500)
-                        if (read > 0) String(buf, 0, read) else ""
-                    }
-                }
-                "pdf" -> {
-                    PDDocument.load(file).use { doc ->
-                        val stripper = PDFTextStripper().apply {
-                            startPage = 1
-                            endPage = doc.numberOfPages.coerceAtMost(2)
-                        }
-                        stripper.getText(doc).take(2500)
-                    }
-                }
-                "jpg", "jpeg", "png", "webp" -> {
-                    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeFile(file.absolutePath, boundsOpts)
-                    val maxDim = maxOf(boundsOpts.outWidth, boundsOpts.outHeight)
-                    val sampleSize = if (maxDim > 2600) 2 else 1
-
-                    val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-                    val bmp = BitmapFactory.decodeFile(file.absolutePath, decodeOpts) ?: return ""
-                    val image = InputImage.fromBitmap(bmp, 0)
-                    val result = ocrRecognizer.process(image).await()
-                    bmp.recycle()
-                    result.text.take(2500)
-                }
-                else -> file.nameWithoutExtension
-            }
-        } catch (_: Exception) {
-            file.nameWithoutExtension
         }
     }
 }
