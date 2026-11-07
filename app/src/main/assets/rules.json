@@ -1,0 +1,51 @@
+{
+  "similarity_threshold": 0.38,
+  "intents": [
+    {
+      "id": "WHATSAPP_SEND",
+      "anchors": "send a whatsapp message to text someone on whatsapp tell person saying",
+      "keywords": ["whatsapp", "message", "text", "tell"],
+      "regex": "(?:whatsapp|message|text|tell)\\s+(?:to\\s+)?([a-zA-Z0-9_ ]+?)\\s+(?:on whatsapp\\s+)?(?:saying|that|:)\\s+(.+)"
+    },
+    {
+      "id": "MAKE_CALL",
+      "anchors": "call phone dial ring contact make a voice call to",
+      "keywords": ["call", "dial", "phone", "ring"],
+      "regex": "(?:call|dial|phone|ring)\\s+([a-zA-Z0-9_ ]+)"
+    },
+    {
+      "id": "SORT_FOLDER",
+      "anchors": "organize sort clean arrange files documents in downloads folder",
+      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files"],
+      "regex": ""
+    },
+    {
+      "id": "SYSTEM_CONTROL",
+      "anchors": "go home go back lock screen open notifications split screen volume up volume down mute",
+      "keywords": ["home", "back", "lock", "notification", "volume", "mute", "split"],
+      "regex": ""
+    }
+  ],
+  "folder_rules": [
+    {
+      "folder_name": "Academic_Notes",
+      "anchors": "lecture notes syllabus algorithms operating systems gate exam paper assignment computer science engineering",
+      "keywords": ["syllabus", "lecture", "assignment", "exam", "algorithm", "gate", "university", "theorem"]
+    },
+    {
+      "folder_name": "Finance_Bills",
+      "anchors": "invoice receipt tax gst bank statement payment transaction bill amount paid total",
+      "keywords": ["invoice", "receipt", "gst", "payment", "transaction", "bank", "bill", "amount"]
+    },
+    {
+      "folder_name": "Code_Projects",
+      "anchors": "source code python kotlin java function class repository github documentation api script",
+      "keywords": ["function", "class", "import", "kotlin", "python", "public", "return", "github"]
+    },
+    {
+      "folder_name": "Personal_IDs",
+      "anchors": "aadhaar pan card passport certificate identity license government of india dob",
+      "keywords": ["aadhaar", "passport", "certificate", "identity", "license", "government"]
+    }
+  ]
+}
