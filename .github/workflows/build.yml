@@ -23,11 +23,18 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-      - name: Download Offline MiniLM ONNX Model & Vocab
+      - name: Prepare Assets & Required Resource Strings
         run: |
           mkdir -p app/src/main/assets
           curl -L -s "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/vocab.txt" -o app/src/main/assets/vocab.txt
           curl -L -s "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_quantized.onnx" -o app/src/main/assets/model_quantized.onnx
+
+          mkdir -p app/src/main/res/values
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">AI Document Organizer</string>
+          </resources>
+          EOF
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
