@@ -1,5 +1,10 @@
 {
-  "similarity_threshold": 0.34,
+  "similarity_threshold": 0.33,
+  "known_people": [
+    "Rishi Yadav",
+    "Deep Narayan Yadav",
+    "Sapana Yadav"
+  ],
   "intents": [
     {
       "id": "STOP_ALL",
@@ -33,8 +38,8 @@
     },
     {
       "id": "SORT_FOLDER",
-      "anchors": "organize sort clean arrange rename all files documents ids in whole tablet storage",
-      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files", "storage", "rename"],
+      "anchors": "organize sort clean arrange rename reclassify all files documents ids marksheets by person name in whole tablet storage",
+      "keywords": ["sort", "organize", "arrange", "clean", "folder", "files", "storage", "rename", "classify", "reclassify"],
       "regex": ""
     },
     {
@@ -47,23 +52,38 @@
   "folder_rules": [
     {
       "folder_name": "Personal_IDs",
-      "anchors": "aadhaar card uidai pan card income tax passport voter id driving license marksheet certificate",
-      "keywords": ["aadhaar", "uidai", "income tax", "permanent account number", "passport", "driving licence", "election commission", "certificate", "marksheet"]
+      "anchors": "aadhaar card uidai pan card income tax passport voter id driving license ration card identity card",
+      "keywords": ["aadhaar", "uidai", "income tax", "permanent account number", "passport", "driving licence", "election commission", "voter", "ration card", "identity card"]
     },
     {
-      "folder_name": "Academic_Notes",
-      "anchors": "lecture notes syllabus algorithms operating systems gate exam paper assignment computer science engineering",
-      "keywords": ["syllabus", "lecture", "assignment", "exam", "algorithm", "gate", "university", "theorem", "question paper", "nptel"]
+      "folder_name": "Marksheets_Certificates",
+      "anchors": "high school intermediate marksheet grade sheet result semester btech degree diploma certificate caste income domicile migration",
+      "keywords": ["marksheet", "marks statement", "grade sheet", "high school", "intermediate", "board of", "semester", "roll number", "certificate", "domicile", "caste", "income certificate", "provisional"]
     },
     {
-      "folder_name": "Finance_Bills",
-      "anchors": "invoice receipt tax gst bank statement payment transaction bill amount paid total",
-      "keywords": ["invoice", "receipt", "gst", "payment", "transaction", "bank", "bill", "amount", "upi"]
+      "folder_name": "Exams_Admissions",
+      "anchors": "admit card hall ticket scorecard rank card gate ugc net jee counselling allotment letter application form",
+      "keywords": ["admit card", "hall ticket", "scorecard", "rank", "registration number", "examination", "allotment", "application form", "gate", "ugc net"]
     },
     {
-      "folder_name": "Code_Projects",
-      "anchors": "source code python kotlin java function class repository github documentation api script",
-      "keywords": ["function", "class", "import", "kotlin", "python", "public", "return", "github", "json"]
+      "folder_name": "Career_Resumes",
+      "anchors": "curriculum vitae resume experience skills internship offer letter experience certificate joining letter",
+      "keywords": ["resume", "curriculum vitae", "internship", "offer letter", "linkedin", "github", "work experience", "projects", "certifications"]
+    },
+    {
+      "folder_name": "Academic_Study_Material",
+      "anchors": "lecture notes syllabus algorithms operating systems dbms computer networks research paper ieee springer assignment tutorial",
+      "keywords": ["syllabus", "lecture", "assignment", "algorithm", "operating system", "deadlock", "abstract", "introduction", "methodology", "question paper", "unit"]
+    },
+    {
+      "folder_name": "Finance_Bills_Receipts",
+      "anchors": "invoice receipt tax gst bank statement passbook payment transaction electricity bill recharge ticket booking",
+      "keywords": ["invoice", "receipt", "gst", "payment", "transaction", "bank", "ifsc", "account number", "bill", "amount", "upi", "irctc", "ticket"]
+    },
+    {
+      "folder_name": "Code_And_Data",
+      "anchors": "source code python kotlin java function class repository github documentation api script json xml dataset",
+      "keywords": ["function", "class", "import", "kotlin", "python", "public", "return", "def ", "val ", "var "]
     }
   ]
 }
